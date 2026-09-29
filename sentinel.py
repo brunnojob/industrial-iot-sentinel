@@ -1,128 +1,232 @@
 from __future__ import annotations
 
-import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 
+class Quality(str, Enum):
+    GOOD = "good"
+    UNCERTAIN = "uncertain"
+    BAD = "bad"
+
+
+class Direction(str, Enum):
+    EMBARK = "embark"
+    DISEMBARK = "disembark"
+
+
 @dataclass(frozen=True)
-class ThresholdRule:
+class SensorSpec:
+    sensor_id: str
     metric: str
-    high: float
-    clear_below: float
-    consecutive: int = 2
-    unit: str = ""
+    raw_min: float
+    raw_max: float
+    eu_min: float
+    eu_max: float
+    unit: str
+    max_age_seconds: int = 60
 
     def __post_init__(self) -> None:
-        if not self.metric or self.clear_below >= self.high or self.consecutive < 1:
-            raise ValueError("invalid threshold rule")
+        if self.raw_min >= self.raw_max or self.eu_min >= self.eu_max or self.max_age_seconds < 1:
+            raise ValueError("invalid sensor specification")
+
+
+@dataclass(frozen=True)
+class SensorReading:
+    sensor_id: str
+    sequence: int
+    value: float
+    timestamp: float
+    quality: Quality
+
+
+@dataclass(frozen=True)
+class Measurement:
+    sensor_id: str
+    metric: str
+    value: float
+    unit: str
+    timestamp: float
+    quality: Quality
+
+
+@dataclass(frozen=True)
+class ZonePolicy:
+    zone_id: str
+    capacity: int
+    permitted_roles: frozenset[str]
+    hazardous: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.zone_id or self.capacity < 1:
+            raise ValueError("invalid zone policy")
+
+
+@dataclass(frozen=True)
+class Person:
+    person_id: str
+    role: str
+    active: bool = True
+
+
+@dataclass(frozen=True)
+class MovementEvent:
+    event_id: str
+    person_id: str
+    direction: Direction
+    zone_id: str
+    timestamp: float
+
+
+@dataclass(frozen=True)
+class Alert:
+    alert_id: str
+    severity: str
+    subject: str
+    reason: str
+    timestamp: float
 
 
 @dataclass
-class Alert:
-    sensor_id: str
-    metric: str
-    opened_at: float
-    last_value: float
-    occurrences: int = 1
-    acknowledged: bool = False
-    resolved_at: float | None = None
+class DigitalTwin:
+    vessel_id: str
+    zones: dict[str, ZonePolicy]
+    max_persons_on_board: int
+    people: dict[str, Person]
+    occupants: dict[str, set[str]] = field(default_factory=dict)
+    movement_ids: set[str] = field(default_factory=set)
+    alerts: list[Alert] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.vessel_id or self.max_persons_on_board < 1:
+            raise ValueError("invalid vessel limits")
+        self.occupants = {zone_id: set() for zone_id in self.zones}
+
+    def apply_movement(self, event: MovementEvent) -> dict[str, Any]:
+        if not event.event_id or event.event_id in self.movement_ids:
+            raise ValueError("duplicate or empty movement event")
+        person = self.people.get(event.person_id)
+        policy = self.zones.get(event.zone_id)
+        if person is None or not person.active or policy is None:
+            raise PermissionError("person or zone is not authorized")
+        if person.role not in policy.permitted_roles:
+            raise PermissionError("role is not permitted in zone")
+        zone_people = self.occupants[event.zone_id]
+        if event.direction is Direction.EMBARK:
+            if event.person_id in zone_people:
+                raise ValueError("person is already in zone")
+            board_count = self.people_on_board
+            if board_count >= self.max_persons_on_board:
+                self._alert("critical", event.zone_id, "vessel_pob_limit_exceeded", event.timestamp)
+                raise OverflowError("vessel POB limit reached")
+            if len(zone_people) >= policy.capacity:
+                self._alert("high", event.zone_id, "zone_capacity_exceeded", event.timestamp)
+                raise OverflowError("zone capacity reached")
+            zone_people.add(event.person_id)
+        else:
+            if event.person_id not in zone_people:
+                raise ValueError("person is not recorded in zone")
+            zone_people.remove(event.person_id)
+        self.movement_ids.add(event.event_id)
+        return {
+            "vessel_id": self.vessel_id,
+            "zone_id": event.zone_id,
+            "people_in_zone": len(zone_people),
+            "people_on_board": self.people_on_board,
+            "capacity_remaining": self.max_persons_on_board - self.people_on_board,
+        }
 
     @property
-    def active(self) -> bool:
-        return self.resolved_at is None
+    def people_on_board(self) -> int:
+        return sum(len(person_ids) for person_ids in self.occupants.values())
+
+    def assess_zone(self, zone_id: str) -> dict[str, Any]:
+        policy = self.zones.get(zone_id)
+        if policy is None:
+            raise KeyError(zone_id)
+        current = self.occupants[zone_id]
+        ratio = len(current) / policy.capacity
+        severity = "critical" if ratio >= 1 else "warning" if ratio >= 0.8 else "normal"
+        return {
+            "zone_id": zone_id,
+            "people": len(current),
+            "capacity": policy.capacity,
+            "occupancy_ratio": round(ratio, 3),
+            "severity": severity,
+            "hazardous": policy.hazardous,
+            "people_on_board": self.people_on_board,
+        }
+
+    def reconcile_badge_totals(self, access_total: int, now: float | None = None) -> bool:
+        if access_total < 0:
+            raise ValueError("access total cannot be negative")
+        if access_total != self.people_on_board:
+            self._alert("critical", self.vessel_id, f"pob_mismatch:{access_total}:{self.people_on_board}", time.time() if now is None else now)
+            return False
+        return True
+
+    def _alert(self, severity: str, subject: str, reason: str, timestamp: float) -> None:
+        self.alerts.append(Alert(f"alt-{len(self.alerts) + 1}", severity, subject, reason, timestamp))
 
 
-class TelemetrySentinel:
-    def __init__(self, rules: list[ThresholdRule], max_age_seconds: int = 3600, future_skew_seconds: int = 30):
-        self.rules = {rule.metric: rule for rule in rules}
-        self.max_age_seconds = max_age_seconds
-        self.future_skew_seconds = future_skew_seconds
-        self.alerts: list[Alert] = []
-        self._event_ids: set[str] = set()
-        self._sequences: dict[str, int] = {}
-        self._breach_counts: dict[tuple[str, str], int] = {}
-        self._active: dict[tuple[str, str], Alert] = {}
+class SensorService:
+    def __init__(self, specifications: list[SensorSpec]):
+        self.specifications = {item.sensor_id: item for item in specifications}
+        self.last_sequence: dict[str, int] = {}
 
-    def ingest(self, event: dict[str, Any], now: float | None = None) -> dict[str, Any]:
+    def ingest(self, reading: SensorReading, now: float | None = None) -> Measurement:
         current = time.time() if now is None else now
-        event_id = str(event.get("event_id", ""))
-        sensor_id = str(event.get("sensor_id", ""))
-        metric = str(event.get("metric", ""))
-        value = event.get("value")
-        sequence = event.get("sequence")
-        timestamp = event.get("timestamp")
-        if not event_id or not sensor_id or metric not in self.rules:
-            raise ValueError("event identity or metric is invalid")
-        if event_id in self._event_ids:
-            return {"accepted": False, "reason": "duplicate_event"}
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not isinstance(timestamp, (int, float)) or not isinstance(sequence, int):
-            raise ValueError("event fields have invalid types")
-        if timestamp < current - self.max_age_seconds or timestamp > current + self.future_skew_seconds:
-            raise ValueError("event timestamp is outside the accepted window")
-        prior_sequence = self._sequences.get(sensor_id, -1)
-        if sequence <= prior_sequence:
-            raise ValueError("sensor sequence must increase monotonically")
-        self._event_ids.add(event_id)
-        self._sequences[sensor_id] = sequence
-        key = (sensor_id, metric)
-        rule = self.rules[metric]
-        alert = self._active.get(key)
-        if value >= rule.high:
-            self._breach_counts[key] = self._breach_counts.get(key, 0) + 1
-            if alert is None and self._breach_counts[key] >= rule.consecutive:
-                alert = Alert(sensor_id, metric, float(timestamp), float(value))
-                self._active[key] = alert
-                self.alerts.append(alert)
-            elif alert is not None:
-                alert.last_value = float(value)
-                alert.occurrences += 1
-        else:
-            self._breach_counts[key] = 0
-            if alert is not None and value <= rule.clear_below:
-                alert.last_value = float(value)
-                alert.resolved_at = float(timestamp)
-                del self._active[key]
-        return {
-            "accepted": True,
-            "alert_active": key in self._active,
-            "breach_count": self._breach_counts.get(key, 0),
-        }
-
-    def acknowledge(self, sensor_id: str, metric: str) -> None:
-        alert = self._active.get((sensor_id, metric))
-        if alert is None:
-            raise KeyError("active alert not found")
-        alert.acknowledged = True
-
-    def snapshot(self) -> dict[str, Any]:
-        return {
-            "active_alerts": [
-                {
-                    "sensor_id": alert.sensor_id,
-                    "metric": alert.metric,
-                    "last_value": alert.last_value,
-                    "occurrences": alert.occurrences,
-                    "acknowledged": alert.acknowledged,
-                    "opened_at": alert.opened_at,
-                }
-                for alert in self._active.values()
-            ],
-            "total_alerts": len(self.alerts),
-            "accepted_event_ids": len(self._event_ids),
-        }
+        specification = self.specifications.get(reading.sensor_id)
+        if specification is None:
+            raise KeyError("unregistered sensor")
+        if reading.quality is not Quality.GOOD:
+            raise ValueError("sensor quality is not good")
+        if not specification.raw_min <= reading.value <= specification.raw_max:
+            raise ValueError("raw sensor value is outside calibrated range")
+        if reading.timestamp < current - specification.max_age_seconds or reading.timestamp > current + 5:
+            raise ValueError("sensor reading is stale or from the future")
+        if reading.sequence <= self.last_sequence.get(reading.sensor_id, -1):
+            raise ValueError("sensor sequence is not monotonic")
+        self.last_sequence[reading.sensor_id] = reading.sequence
+        fraction = (reading.value - specification.raw_min) / (specification.raw_max - specification.raw_min)
+        engineering_value = specification.eu_min + fraction * (specification.eu_max - specification.eu_min)
+        return Measurement(
+            reading.sensor_id,
+            specification.metric,
+            round(engineering_value, 4),
+            specification.unit,
+            reading.timestamp,
+            reading.quality,
+        )
 
 
-def sample() -> list[dict[str, Any]]:
-    now = time.time()
-    sentinel = TelemetrySentinel([ThresholdRule("vibration_mm_s", 9.0, 6.0, consecutive=2, unit="mm/s")])
-    events = [
-        {"event_id": "evt-100", "sensor_id": "pump-3", "metric": "vibration_mm_s", "value": 9.4, "sequence": 1, "timestamp": now},
-        {"event_id": "evt-101", "sensor_id": "pump-3", "metric": "vibration_mm_s", "value": 10.1, "sequence": 2, "timestamp": now + 1},
-    ]
-    return [sentinel.ingest(event, now=now + 1) for event in events]
+def sample_snapshot() -> dict[str, Any]:
+    people = {
+        "crew-100": Person("crew-100", "technician"),
+        "crew-101": Person("crew-101", "supervisor"),
+        "crew-102": Person("crew-102", "technician"),
+    }
+    twin = DigitalTwin(
+        "rf-offshore-demo",
+        {
+            "engine-room": ZonePolicy("engine-room", 2, frozenset({"technician", "supervisor"}), True),
+            "control-room": ZonePolicy("control-room", 4, frozenset({"supervisor"})),
+        },
+        20,
+        people,
+    )
+    twin.apply_movement(MovementEvent("gate-1", "crew-100", Direction.EMBARK, "engine-room", 1))
+    twin.apply_movement(MovementEvent("gate-2", "crew-101", Direction.EMBARK, "control-room", 2))
+    return {
+        "vessel_id": twin.vessel_id,
+        "people_on_board": twin.people_on_board,
+        "zones": [twin.assess_zone(zone_id) for zone_id in twin.zones],
+        "alerts": [alert.__dict__ for alert in twin.alerts],
+    }
 
 
 if __name__ == "__main__":
-    print(json.dumps({"results": sample()}, indent=2))
+    import json
+    print(json.dumps(sample_snapshot(), indent=2))
