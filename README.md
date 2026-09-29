@@ -1,12 +1,12 @@
 # Industrial IoT Sentinel
 
-A telemetry pipeline for validating sensor events, detecting threshold breaches, suppressing duplicate alerts and tracking recovery.
+An offshore digital twin for calibrated sensor ingestion, zone occupancy, badge-event reconciliation, people-on-board (POB) totals and safety alerts.
 
 ## Run
 
 ```bash
-python sentinel.py
 python -m unittest
+python sentinel.py
 ```
 
-The core accepts normalized JSON-like readings and has no connection to live industrial equipment.
+The twin consumes simulated or normalized events. It does not connect to live vessel access-control or safety systems.
