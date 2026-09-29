@@ -18,7 +18,7 @@ class OffshoreDigitalTwinTests(unittest.TestCase):
         self.people = {
             "p1": Person("p1", "technician"),
             "p2": Person("p2", "supervisor"),
-            "p3": Person("p3", "visitor"),
+            "p3": Person("p3", "technician"),
         }
         self.twin = DigitalTwin(
             "vessel-1",
@@ -42,8 +42,10 @@ class OffshoreDigitalTwinTests(unittest.TestCase):
         self.assertEqual(self.twin.people_on_board, 1)
 
     def test_zone_role_and_pob_limits_are_enforced(self):
+        self.people["p3"] = Person("p3", "visitor")
         with self.assertRaises(PermissionError):
             self.twin.apply_movement(self.movement("m1", "p3", Direction.EMBARK, "bridge"))
+        self.people["p3"] = Person("p3", "technician")
         self.twin.apply_movement(self.movement("m2", "p1", Direction.EMBARK, "engine-room"))
         self.twin.apply_movement(self.movement("m3", "p2", Direction.EMBARK, "bridge"))
         with self.assertRaises(OverflowError):
