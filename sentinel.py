@@ -29,7 +29,11 @@ class SensorSpec:
     max_age_seconds: int = 60
 
     def __post_init__(self) -> None:
-        if self.raw_min >= self.raw_max or self.eu_min >= self.eu_max or self.max_age_seconds < 1:
+        if (
+            self.raw_min >= self.raw_max
+            or self.eu_min >= self.eu_max
+            or self.max_age_seconds < 1
+        ):
             raise ValueError("invalid sensor specification")
 
 
@@ -76,7 +80,7 @@ class MovementEvent:
     event_id: str
     person_id: str
     direction: Direction
-    zone_id: str | None  # Permitido None para desembarque total da embarcação
+    zone_id: str | None
     timestamp: float
 
 
@@ -107,12 +111,11 @@ class DigitalTwin:
     def apply_movement(self, event: MovementEvent) -> dict[str, Any]:
         if not event.event_id or event.event_id in self.movement_ids:
             raise ValueError("duplicate or empty movement event")
-        
+
         person = self.people.get(event.person_id)
         if person is None or not person.active:
             raise PermissionError("person is not authorized or inactive")
 
-        # Caso seja desembarque total da embarcação (zone_id = None)
         if event.direction is Direction.DISEMBARK and event.zone_id is None:
             found_zone = None
             for z_id, occupants_set in self.occupants.items():
@@ -125,31 +128,44 @@ class DigitalTwin:
             self.movement_ids.add(event.event_id)
             return self._build_response(found_zone)
 
-        # Validação normal de zona
-        policy = self.zones.get(event.zone_id)  # type: ignore
+        policy = self.zones.get(event.zone_id)
         if policy is None:
             raise KeyError("zone does not exist")
 
         if person.role not in policy.permitted_roles:
             raise PermissionError("role is not permitted in zone")
 
-        zone_people = self.occupants[event.zone_id]  # type: ignore
+        zone_people = self.occupants[event.zone_id]
 
         if event.direction is Direction.EMBARK:
-            # Melhoria real: se a pessoa já estiver noutra zona, removemos de lá primeiro (transição fluida)
-            for z_id, occupants_set in self.occupants.items():
-                if event.person_id in occupants_set:
-                    occupants_set.remove(event.person_id)
-
-            board_count = self.people_on_board
-            if board_count >= self.max_persons_on_board:
-                self._alert("critical", event.zone_id, "vessel_pob_limit_exceeded", event.timestamp)  # type: ignore
+            current_zone = next(
+                (
+                    z
+                    for z, people in self.occupants.items()
+                    if event.person_id in people
+                ),
+                None,
+            )
+            if current_zone == event.zone_id:
+                raise ValueError("person already recorded in destination zone")
+            if (
+                current_zone is None
+                and self.people_on_board >= self.max_persons_on_board
+            ):
+                self._alert(
+                    "critical",
+                    event.zone_id,
+                    "vessel_pob_limit_exceeded",
+                    event.timestamp,
+                )
                 raise OverflowError("vessel POB limit reached")
-            
             if len(zone_people) >= policy.capacity:
-                self._alert("high", event.zone_id, "zone_capacity_exceeded", event.timestamp)  # type: ignore
+                self._alert(
+                    "high", event.zone_id, "zone_capacity_exceeded", event.timestamp
+                )
                 raise OverflowError("zone capacity reached")
-            
+            if current_zone is not None:
+                self.occupants[current_zone].remove(event.person_id)
             zone_people.add(event.person_id)
         else:
             if event.person_id not in zone_people:
@@ -157,7 +173,7 @@ class DigitalTwin:
             zone_people.remove(event.person_id)
 
         self.movement_ids.add(event.event_id)
-        return self._build_response(event.zone_id)  # type: ignore
+        return self._build_response(event.zone_id)
 
     def _build_response(self, zone_id: str) -> dict[str, Any]:
         zone_people = self.occupants[zone_id]
@@ -190,16 +206,27 @@ class DigitalTwin:
             "people_on_board": self.people_on_board,
         }
 
-    def reconcile_badge_totals(self, access_total: int, now: float | None = None) -> bool:
+    def reconcile_badge_totals(
+        self, access_total: int, now: float | None = None
+    ) -> bool:
         if access_total < 0:
             raise ValueError("access total cannot be negative")
         if access_total != self.people_on_board:
-            self._alert("critical", self.vessel_id, f"pob_mismatch:{access_total}:{self.people_on_board}", time.time() if now is None else now)
+            self._alert(
+                "critical",
+                self.vessel_id,
+                f"pob_mismatch:{access_total}:{self.people_on_board}",
+                time.time() if now is None else now,
+            )
             return False
         return True
 
-    def _alert(self, severity: str, subject: str, reason: str, timestamp: float) -> None:
-        self.alerts.append(Alert(f"alt-{len(self.alerts) + 1}", severity, subject, reason, timestamp))
+    def _alert(
+        self, severity: str, subject: str, reason: str, timestamp: float
+    ) -> None:
+        self.alerts.append(
+            Alert(f"alt-{len(self.alerts) + 1}", severity, subject, reason, timestamp)
+        )
 
 
 class SensorService:
@@ -216,13 +243,20 @@ class SensorService:
             raise ValueError("sensor quality is not good")
         if not specification.raw_min <= reading.value <= specification.raw_max:
             raise ValueError("raw sensor value is outside calibrated range")
-        if reading.timestamp < current - specification.max_age_seconds or reading.timestamp > current + 5:
+        if (
+            reading.timestamp < current - specification.max_age_seconds
+            or reading.timestamp > current + 5
+        ):
             raise ValueError("sensor reading is stale or from the future")
         if reading.sequence <= self.last_sequence.get(reading.sensor_id, -1):
             raise ValueError("sensor sequence is not monotonic")
         self.last_sequence[reading.sensor_id] = reading.sequence
-        fraction = (reading.value - specification.raw_min) / (specification.raw_max - specification.raw_min)
-        engineering_value = specification.eu_min + fraction * (specification.eu_max - specification.eu_min)
+        fraction = (reading.value - specification.raw_min) / (
+            specification.raw_max - specification.raw_min
+        )
+        engineering_value = specification.eu_min + fraction * (
+            specification.eu_max - specification.eu_min
+        )
         return Measurement(
             reading.sensor_id,
             specification.metric,
@@ -242,14 +276,20 @@ def sample_snapshot() -> dict[str, Any]:
     twin = DigitalTwin(
         "rf-offshore-demo",
         {
-            "engine-room": ZonePolicy("engine-room", 2, frozenset({"technician", "supervisor"}), True),
+            "engine-room": ZonePolicy(
+                "engine-room", 2, frozenset({"technician", "supervisor"}), True
+            ),
             "control-room": ZonePolicy("control-room", 4, frozenset({"supervisor"})),
         },
         20,
         people,
     )
-    twin.apply_movement(MovementEvent("gate-1", "crew-100", Direction.EMBARK, "engine-room", 1))
-    twin.apply_movement(MovementEvent("gate-2", "crew-101", Direction.EMBARK, "control-room", 2))
+    twin.apply_movement(
+        MovementEvent("gate-1", "crew-100", Direction.EMBARK, "engine-room", 1)
+    )
+    twin.apply_movement(
+        MovementEvent("gate-2", "crew-101", Direction.EMBARK, "control-room", 2)
+    )
     return {
         "vessel_id": twin.vessel_id,
         "people_on_board": twin.people_on_board,
@@ -260,4 +300,5 @@ def sample_snapshot() -> dict[str, Any]:
 
 if __name__ == "__main__":
     import json
+
     print(json.dumps(sample_snapshot(), indent=2))

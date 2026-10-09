@@ -1,13 +1,27 @@
 # Industrial IoT Sentinel
 
-An offshore digital twin for calibrated sensor ingestion, zone occupancy, badge-event reconciliation, people-on-board (POB) totals and safety alerts.
+Gêmeo operacional de ocupação de embarcação, capacidade por zona, função de pessoas e movimentos idempotentes, recuperados de um diário SQLite.
 
-## Run
+## Executar
 
-```bash
-python -m unittest
-python sentinel.py
+Requisitos: Python 3.11+.
+
+```sh
+python -m unittest discover
+python events.py configuracao.json --database .local/twin.db < movimentos.jsonl > resultado.json
 ```
 
-The twin consumes simulated or normalized events. It does not connect to live vessel access-control or safety systems.
-# JUST UPDATED FOR RUN BY ME 
+## Funcionamento
+
+`DurableTwin` valida em uma cópia antes de confirmar a transação. Falhas de capacidade conservam a ocupação anterior. A configuração é identificada por fingerprint e não pode mudar silenciosamente numa base existente.
+
+## Persistência de resultados
+
+O arquivo de operações está em [vercel-home-telemetry-api.vercel.app](https://vercel-home-telemetry-api.vercel.app/laboratory.html?project=industrial-iot-sentinel). As migrações Supabase estão no [repositório da API](https://github.com/brunnojob/vercel-home-telemetry-api/tree/main/supabase/migrations).
+
+```sh
+python cloud/sync.py enqueue resultado.json --project industrial-iot-sentinel
+python cloud/sync.py sync
+```
+
+Defina `BRUNNODEV_ACCESS_TOKEN` com sua sessão. A fila SQLite conserva os relatórios até confirmação do servidor; o mesmo conteúdo não gera registros duplicados. Tokens não são gravados no código.
