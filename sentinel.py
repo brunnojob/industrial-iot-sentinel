@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -30,7 +31,11 @@ class SensorSpec:
 
     def __post_init__(self) -> None:
         if (
-            self.raw_min >= self.raw_max
+            not all(math.isfinite(value) for value in (self.raw_min, self.raw_max, self.eu_min, self.eu_max))
+            or not self.sensor_id
+            or not self.metric
+            or not self.unit
+            or self.raw_min >= self.raw_max
             or self.eu_min >= self.eu_max
             or self.max_age_seconds < 1
         ):
@@ -232,10 +237,16 @@ class DigitalTwin:
 class SensorService:
     def __init__(self, specifications: list[SensorSpec]):
         self.specifications = {item.sensor_id: item for item in specifications}
+        if len(self.specifications) != len(specifications):
+            raise ValueError("duplicate sensor specification")
         self.last_sequence: dict[str, int] = {}
 
     def ingest(self, reading: SensorReading, now: float | None = None) -> Measurement:
         current = time.time() if now is None else now
+        if not all(math.isfinite(value) for value in (current, reading.value, reading.timestamp)):
+            raise ValueError("finite reading and clock required")
+        if isinstance(reading.sequence, bool) or not isinstance(reading.sequence, int) or reading.sequence < 0:
+            raise ValueError("non-negative integer sequence required")
         specification = self.specifications.get(reading.sensor_id)
         if specification is None:
             raise KeyError("unregistered sensor")
