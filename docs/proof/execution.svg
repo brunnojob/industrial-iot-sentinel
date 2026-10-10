@@ -3,8 +3,8 @@
 <title>Recorded program execution</title>
 <g font-family="monospace" font-size="16">
 <text x="24" y="36" fill="#c9d1d9">brunnojob/industrial-iot-sentinel</text>
-<text x="24" y="58" fill="#c9d1d9">Executed: 2026-10-10T02:35:10.533143+00:00</text>
-<text x="24" y="80" fill="#c9d1d9">Source: e2e29092a256</text>
+<text x="24" y="58" fill="#c9d1d9">Executed: 2026-10-10T02:43:23.735712+00:00</text>
+<text x="24" y="80" fill="#c9d1d9">Source: ffce07386ac2</text>
 <text x="24" y="102" fill="#c9d1d9"></text>
 <text x="24" y="124" fill="#3fb950">PASS python -m unittest discover -v</text>
 <text x="24" y="146" fill="#79c0ff">$ bash -e -o pipefail -c python -m unittest discover -v</text>
@@ -40,7 +40,7 @@
 <text x="24" y="806" fill="#c9d1d9">test_retries_keep_reports_until_confirmed </text>
 <text x="24" y="828" fill="#c9d1d9">(test_sync.OutboxTests.test_retries_keep_reports_until_confirmed) ... ok</text>
 <text x="24" y="850" fill="#c9d1d9">----------------------------------------------------------------------</text>
-<text x="24" y="872" fill="#c9d1d9">Ran 6 tests in 0.078s</text>
+<text x="24" y="872" fill="#c9d1d9">Ran 6 tests in 0.059s</text>
 <text x="24" y="894" fill="#c9d1d9">Full output: evidence.json</text>
 <text x="24" y="916" fill="#c9d1d9"></text>
 <text x="24" y="938" fill="#3fb950">PASS Persist occupancy, reject overflow, recover and replay</text>

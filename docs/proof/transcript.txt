@@ -8,7 +8,7 @@ test_stale_or_replayed_sensor_sequence_is_rejected (test_sentinel.OffshoreDigita
 test_zone_role_and_pob_limits_are_enforced (test_sentinel.OffshoreDigitalTwinTests.test_zone_role_and_pob_limits_are_enforced) ... ok
 
 ----------------------------------------------------------------------
-Ran 7 tests in 0.042s
+Ran 7 tests in 0.017s
 
 OK
 
@@ -21,7 +21,7 @@ test_conflicting_key_cannot_overwrite_a_report (test_sync.OutboxTests.test_confl
 test_retries_keep_reports_until_confirmed (test_sync.OutboxTests.test_retries_keep_reports_until_confirmed) ... ok
 
 ----------------------------------------------------------------------
-Ran 6 tests in 0.078s
+Ran 6 tests in 0.059s
 
 OK
 

@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "repository": "brunnojob/industrial-iot-sentinel",
-  "source_commit": "e2e29092a2564f94b09026e6ec362da639a996c4",
-  "generated_at": "2026-10-10T02:35:10.533143+00:00",
-  "run_url": "https://github.com/brunnojob/industrial-iot-sentinel/actions/runs/38017501360",
+  "source_commit": "ffce07386ac2d5750a77d3ad7804272bb0af4629",
+  "generated_at": "2026-10-10T02:43:23.735712+00:00",
+  "run_url": "https://github.com/brunnojob/industrial-iot-sentinel/actions/runs/38017991930",
   "inputs_sha256": {
     ".proof/scenarios.json": "74e8eb706d73e37c9607c10a25a77f2a1c6e77ffed98432a704c7fa4fc01e3ce",
     ".proof/demo.py": "d773b90472ec30ded81e59a9bcf0748c1a83d96397387d4cf4836e9fc0bbda5a"
@@ -23,9 +23,9 @@
       "exit": 0,
       "expected_exit": 0,
       "passed": true,
-      "seconds": 0.201,
-      "output": "test_replay_and_rejected_transition_are_atomic (test_durable.DurableTests.test_replay_and_rejected_transition_are_atomic) ... ok\ntest_movement_replay_is_rejected (test_sentinel.OffshoreDigitalTwinTests.test_movement_replay_is_rejected) ... ok\ntest_pob_and_zone_occupancy_follow_badge_events (test_sentinel.OffshoreDigitalTwinTests.test_pob_and_zone_occupancy_follow_badge_events) ... ok\ntest_pob_reconciliation_emits_alert (test_sentinel.OffshoreDigitalTwinTests.test_pob_reconciliation_emits_alert) ... ok\ntest_sensor_calibration_and_quality_checks (test_sentinel.OffshoreDigitalTwinTests.test_sensor_calibration_and_quality_checks) ... ok\ntest_stale_or_replayed_sensor_sequence_is_rejected (test_sentinel.OffshoreDigitalTwinTests.test_stale_or_replayed_sensor_sequence_is_rejected) ... ok\ntest_zone_role_and_pob_limits_are_enforced (test_sentinel.OffshoreDigitalTwinTests.test_zone_role_and_pob_limits_are_enforced) ... ok\n\n----------------------------------------------------------------------\nRan 7 tests in 0.042s\n\nOK\n",
-      "output_sha256": "59a3e9c76acb46d2a5ec595fd7fded0f7320bb23523cb51b0be79dba17595d8d"
+      "seconds": 0.151,
+      "output": "test_replay_and_rejected_transition_are_atomic (test_durable.DurableTests.test_replay_and_rejected_transition_are_atomic) ... ok\ntest_movement_replay_is_rejected (test_sentinel.OffshoreDigitalTwinTests.test_movement_replay_is_rejected) ... ok\ntest_pob_and_zone_occupancy_follow_badge_events (test_sentinel.OffshoreDigitalTwinTests.test_pob_and_zone_occupancy_follow_badge_events) ... ok\ntest_pob_reconciliation_emits_alert (test_sentinel.OffshoreDigitalTwinTests.test_pob_reconciliation_emits_alert) ... ok\ntest_sensor_calibration_and_quality_checks (test_sentinel.OffshoreDigitalTwinTests.test_sensor_calibration_and_quality_checks) ... ok\ntest_stale_or_replayed_sensor_sequence_is_rejected (test_sentinel.OffshoreDigitalTwinTests.test_stale_or_replayed_sensor_sequence_is_rejected) ... ok\ntest_zone_role_and_pob_limits_are_enforced (test_sentinel.OffshoreDigitalTwinTests.test_zone_role_and_pob_limits_are_enforced) ... ok\n\n----------------------------------------------------------------------\nRan 7 tests in 0.017s\n\nOK\n",
+      "output_sha256": "fdb342648e72613ca1272da69420c5af58c5ea6e0c5bd9e6e47f8b6c60fe82eb"
     },
     {
       "display": true,
@@ -41,9 +41,9 @@
       "exit": 0,
       "expected_exit": 0,
       "passed": true,
-      "seconds": 0.352,
-      "output": "test_confirmed_receipt_marks_the_report_sent (test_receipts.ReceiptTests.test_confirmed_receipt_marks_the_report_sent) ... ok\ntest_events_reject_empty_values_of_the_wrong_type (test_receipts.ReceiptTests.test_events_reject_empty_values_of_the_wrong_type) ... ok\ntest_invalid_receipts_keep_the_report_pending (test_receipts.ReceiptTests.test_invalid_receipts_keep_the_report_pending) ... ok\ntest_omitted_events_and_empty_list_have_the_same_key (test_receipts.ReceiptTests.test_omitted_events_and_empty_list_have_the_same_key) ... ok\ntest_conflicting_key_cannot_overwrite_a_report (test_sync.OutboxTests.test_conflicting_key_cannot_overwrite_a_report) ... ok\ntest_retries_keep_reports_until_confirmed (test_sync.OutboxTests.test_retries_keep_reports_until_confirmed) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.078s\n\nOK\n",
-      "output_sha256": "b82230e6e9fb28d829245483eac62477641f0c147fe1c1522462fac19be43147"
+      "seconds": 0.301,
+      "output": "test_confirmed_receipt_marks_the_report_sent (test_receipts.ReceiptTests.test_confirmed_receipt_marks_the_report_sent) ... ok\ntest_events_reject_empty_values_of_the_wrong_type (test_receipts.ReceiptTests.test_events_reject_empty_values_of_the_wrong_type) ... ok\ntest_invalid_receipts_keep_the_report_pending (test_receipts.ReceiptTests.test_invalid_receipts_keep_the_report_pending) ... ok\ntest_omitted_events_and_empty_list_have_the_same_key (test_receipts.ReceiptTests.test_omitted_events_and_empty_list_have_the_same_key) ... ok\ntest_conflicting_key_cannot_overwrite_a_report (test_sync.OutboxTests.test_conflicting_key_cannot_overwrite_a_report) ... ok\ntest_retries_keep_reports_until_confirmed (test_sync.OutboxTests.test_retries_keep_reports_until_confirmed) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.059s\n\nOK\n",
+      "output_sha256": "a0f25a08606a2ceef82b9b105de436655c69eb7ba5df39843a6f05403b4be01f"
     },
     {
       "display": true,
