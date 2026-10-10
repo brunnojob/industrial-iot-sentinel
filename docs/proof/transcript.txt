@@ -1,0 +1,29 @@
+$ bash -e -o pipefail -c python -m unittest discover -v
+test_replay_and_rejected_transition_are_atomic (test_durable.DurableTests.test_replay_and_rejected_transition_are_atomic) ... ok
+test_movement_replay_is_rejected (test_sentinel.OffshoreDigitalTwinTests.test_movement_replay_is_rejected) ... ok
+test_pob_and_zone_occupancy_follow_badge_events (test_sentinel.OffshoreDigitalTwinTests.test_pob_and_zone_occupancy_follow_badge_events) ... ok
+test_pob_reconciliation_emits_alert (test_sentinel.OffshoreDigitalTwinTests.test_pob_reconciliation_emits_alert) ... ok
+test_sensor_calibration_and_quality_checks (test_sentinel.OffshoreDigitalTwinTests.test_sensor_calibration_and_quality_checks) ... ok
+test_stale_or_replayed_sensor_sequence_is_rejected (test_sentinel.OffshoreDigitalTwinTests.test_stale_or_replayed_sensor_sequence_is_rejected) ... ok
+test_zone_role_and_pob_limits_are_enforced (test_sentinel.OffshoreDigitalTwinTests.test_zone_role_and_pob_limits_are_enforced) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.042s
+
+OK
+
+$ bash -e -o pipefail -c python -m unittest discover -v -s cloud
+test_confirmed_receipt_marks_the_report_sent (test_receipts.ReceiptTests.test_confirmed_receipt_marks_the_report_sent) ... ok
+test_events_reject_empty_values_of_the_wrong_type (test_receipts.ReceiptTests.test_events_reject_empty_values_of_the_wrong_type) ... ok
+test_invalid_receipts_keep_the_report_pending (test_receipts.ReceiptTests.test_invalid_receipts_keep_the_report_pending) ... ok
+test_omitted_events_and_empty_list_have_the_same_key (test_receipts.ReceiptTests.test_omitted_events_and_empty_list_have_the_same_key) ... ok
+test_conflicting_key_cannot_overwrite_a_report (test_sync.OutboxTests.test_conflicting_key_cannot_overwrite_a_report) ... ok
+test_retries_keep_reports_until_confirmed (test_sync.OutboxTests.test_retries_keep_reports_until_confirmed) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.078s
+
+OK
+
+$ python .proof/demo.py
+{"capacity_rejection_atomic": true, "recovered": {"events": 2, "peopleOnBoard": 2, "vesselId": "demo-vessel", "zones": [{"capacity": 1, "hazardous": false, "occupancy_ratio": 1.0, "people": 1, "people_on_board": 2, "severity": "critical", "zone_id": "deck"}, {"capacity": 1, "hazardous": false, "occupancy_ratio": 1.0, "people": 1, "people_on_board": 2, "severity": "critical", "zone_id": "bridge"}]}, "replay_idempotent": true}
