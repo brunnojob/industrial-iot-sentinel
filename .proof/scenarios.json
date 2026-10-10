@@ -1,0 +1,47 @@
+{
+  "repository": "brunnojob/industrial-iot-sentinel",
+  "inputs": [
+    ".proof/scenarios.json",
+    ".proof/demo.py"
+  ],
+  "cases": [
+    {
+      "name": "python -m unittest discover -v",
+      "argv": [
+        "bash",
+        "-e",
+        "-o",
+        "pipefail",
+        "-c",
+        "python -m unittest discover -v"
+      ],
+      "timeout": 900,
+      "display": true
+    },
+    {
+      "name": "python -m unittest discover -v -s cloud",
+      "argv": [
+        "bash",
+        "-e",
+        "-o",
+        "pipefail",
+        "-c",
+        "python -m unittest discover -v -s cloud"
+      ],
+      "timeout": 900,
+      "display": true
+    },
+    {
+      "name": "Persist occupancy, reject overflow, recover and replay",
+      "argv": [
+        "python",
+        ".proof/demo.py"
+      ],
+      "contains": [
+        "\"capacity_rejection_atomic\": true",
+        "\"replay_idempotent\": true"
+      ],
+      "timeout": 120
+    }
+  ]
+}
