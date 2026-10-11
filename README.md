@@ -1,5 +1,7 @@
 # Industrial IoT Sentinel
 
+[View execution evidence](https://brunnojob.github.io/devstart-lab/proofs/industrial-iot-sentinel/)
+
 An operational vessel occupancy twin with zone capacity, personnel roles, and idempotent movements recovered from a SQLite journal.
 
 ## Run
