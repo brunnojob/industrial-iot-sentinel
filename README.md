@@ -20,6 +20,8 @@ python events.py examples/vessel.json --database .local/twin.db < examples/movem
 
 `submit_many` accepts 1 to 1000 events and commits the entire batch together. Replaying an identifier with an equivalent event returns a duplicate result; changing that event is rejected. Movement timestamps must be finite, nonnegative and nondecreasing for each person. Use the context manager or `close()` to release a journal connection.
 
+The journal is append-only. Do not edit or delete stored movements or share the database across machines through a network filesystem. Read occupancy through `snapshot()`; direct access to `twin` reflects only the last state loaded by that instance.
+
 ## JSONL processing
 
 ```sh
@@ -46,7 +48,7 @@ Original source and documentation are MIT licensed; see [LICENSE](LICENSE). Thir
 
 Sensor specifications require finite calibration endpoints and unique sensor identifiers. Readings reject invalid clocks, timestamps, non-finite values and invalid sequence numbers before advancing sensor state.
 
-Earlier contribution trailer: `Co-authored-by: nyctophile <33561761+ineedfoundmyway@users.noreply.github.com>`.
+Contributors: [brunnojob](https://github.com/brunnojob) and [ineedfoundmyway](https://github.com/ineedfoundmyway).
 
 Current improvements use the requested trailer: `Co-authored-by: notalkolitc <335617c1+notalkolitc@users.noreply.github.com>`.
 
