@@ -2,9 +2,23 @@
   "repository": "brunnojob/industrial-iot-sentinel",
   "inputs": [
     ".proof/scenarios.json",
-    ".proof/demo.py"
+    ".proof/demo.py",
+    "sentinel.py",
+    "events.py",
+    "test_validation.py",
+    "test_journal.py",
+    "test_cli.py",
+    "examples/vessel.json",
+    "examples/movements.jsonl"
   ],
   "cases": [
+    {
+      "name": "Process documented JSONL input as one transaction",
+      "argv": ["python", "events.py", "examples/vessel.json", "--database", ":memory:", "--atomic-batch"],
+      "input": "examples/movements.jsonl",
+      "contains": ["\"events\": 3", "\"peopleOnBoard\": 1"],
+      "timeout": 30
+    },
     {
       "name": "python -m unittest discover -v",
       "argv": [
@@ -45,3 +59,4 @@
     }
   ]
 }
+

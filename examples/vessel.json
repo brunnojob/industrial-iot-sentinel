@@ -1,0 +1,12 @@
+{
+  "vesselId": "vessel-example",
+  "capacity": 3,
+  "zones": [
+    {"id": "deck", "capacity": 2, "roles": ["crew", "supervisor"]},
+    {"id": "bridge", "capacity": 1, "roles": ["supervisor"], "hazardous": false}
+  ],
+  "people": [
+    {"id": "crew-1", "role": "crew", "active": true},
+    {"id": "supervisor-1", "role": "supervisor", "active": true}
+  ]
+}
