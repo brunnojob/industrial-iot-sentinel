@@ -2,9 +2,22 @@ from __future__ import annotations
 
 import time
 import math
+import threading
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+
+def _identifier(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip()) and len(value) <= 256
+
+
+def _finite(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)
+
+
+def _positive_integer(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, int) and value > 0
 
 
 class Quality(str, Enum):
@@ -31,13 +44,13 @@ class SensorSpec:
 
     def __post_init__(self) -> None:
         if (
-            not all(math.isfinite(value) for value in (self.raw_min, self.raw_max, self.eu_min, self.eu_max))
-            or not self.sensor_id
-            or not self.metric
-            or not self.unit
+            not all(_finite(value) for value in (self.raw_min, self.raw_max, self.eu_min, self.eu_max))
+            or not _identifier(self.sensor_id)
+            or not _identifier(self.metric)
+            or not _identifier(self.unit)
             or self.raw_min >= self.raw_max
             or self.eu_min >= self.eu_max
-            or self.max_age_seconds < 1
+            or not _positive_integer(self.max_age_seconds)
         ):
             raise ValueError("invalid sensor specification")
 
@@ -49,6 +62,18 @@ class SensorReading:
     value: float
     timestamp: float
     quality: Quality
+
+    def __post_init__(self) -> None:
+        if (
+            not _identifier(self.sensor_id)
+            or isinstance(self.sequence, bool)
+            or not isinstance(self.sequence, int)
+            or self.sequence < 0
+            or not _finite(self.value)
+            or not _finite(self.timestamp)
+            or not isinstance(self.quality, Quality)
+        ):
+            raise ValueError("invalid sensor reading")
 
 
 @dataclass(frozen=True)
@@ -69,7 +94,14 @@ class ZonePolicy:
     hazardous: bool = False
 
     def __post_init__(self) -> None:
-        if not self.zone_id or self.capacity < 1:
+        if (
+            not _identifier(self.zone_id)
+            or not _positive_integer(self.capacity)
+            or not isinstance(self.permitted_roles, frozenset)
+            or not self.permitted_roles
+            or not all(_identifier(role) for role in self.permitted_roles)
+            or not isinstance(self.hazardous, bool)
+        ):
             raise ValueError("invalid zone policy")
 
 
@@ -79,6 +111,10 @@ class Person:
     role: str
     active: bool = True
 
+    def __post_init__(self) -> None:
+        if not _identifier(self.person_id) or not _identifier(self.role) or not isinstance(self.active, bool):
+            raise ValueError("invalid person")
+
 
 @dataclass(frozen=True)
 class MovementEvent:
@@ -87,6 +123,18 @@ class MovementEvent:
     direction: Direction
     zone_id: str | None
     timestamp: float
+
+    def __post_init__(self) -> None:
+        if (
+            not _identifier(self.event_id)
+            or not _identifier(self.person_id)
+            or not isinstance(self.direction, Direction)
+            or (self.zone_id is not None and not _identifier(self.zone_id))
+            or (self.direction is Direction.EMBARK and self.zone_id is None)
+            or not _finite(self.timestamp)
+            or self.timestamp < 0
+        ):
+            raise ValueError("invalid movement event")
 
 
 @dataclass(frozen=True)
@@ -107,10 +155,17 @@ class DigitalTwin:
     occupants: dict[str, set[str]] = field(default_factory=dict)
     movement_ids: set[str] = field(default_factory=set)
     alerts: list[Alert] = field(default_factory=list)
+    last_movement_timestamp: dict[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not self.vessel_id or self.max_persons_on_board < 1:
+        if not _identifier(self.vessel_id) or not _positive_integer(self.max_persons_on_board):
             raise ValueError("invalid vessel limits")
+        if any(key != policy.zone_id for key, policy in self.zones.items()):
+            raise ValueError("zone identity mismatch")
+        if any(key != person.person_id for key, person in self.people.items()):
+            raise ValueError("person identity mismatch")
+        if self.occupants or self.movement_ids or self.last_movement_timestamp:
+            raise ValueError("initial occupancy must be recovered through movement events")
         self.occupants = {zone_id: set() for zone_id in self.zones}
 
     def apply_movement(self, event: MovementEvent) -> dict[str, Any]:
@@ -120,6 +175,9 @@ class DigitalTwin:
         person = self.people.get(event.person_id)
         if person is None or not person.active:
             raise PermissionError("person is not authorized or inactive")
+
+        if event.timestamp < self.last_movement_timestamp.get(event.person_id, -1):
+            raise ValueError("movement timestamp is not monotonic for person")
 
         if event.direction is Direction.DISEMBARK and event.zone_id is None:
             found_zone = None
@@ -131,6 +189,7 @@ class DigitalTwin:
                 raise ValueError("person is not on board")
             self.occupants[found_zone].remove(event.person_id)
             self.movement_ids.add(event.event_id)
+            self.last_movement_timestamp[event.person_id] = event.timestamp
             return self._build_response(found_zone)
 
         policy = self.zones.get(event.zone_id)
@@ -178,6 +237,7 @@ class DigitalTwin:
             zone_people.remove(event.person_id)
 
         self.movement_ids.add(event.event_id)
+        self.last_movement_timestamp[event.person_id] = event.timestamp
         return self._build_response(event.zone_id)
 
     def _build_response(self, zone_id: str) -> dict[str, Any]:
@@ -214,14 +274,17 @@ class DigitalTwin:
     def reconcile_badge_totals(
         self, access_total: int, now: float | None = None
     ) -> bool:
-        if access_total < 0:
+        if isinstance(access_total, bool) or not isinstance(access_total, int) or access_total < 0:
             raise ValueError("access total cannot be negative")
+        timestamp = time.time() if now is None else now
+        if not _finite(timestamp):
+            raise ValueError("finite reconciliation timestamp required")
         if access_total != self.people_on_board:
             self._alert(
                 "critical",
                 self.vessel_id,
                 f"pob_mismatch:{access_total}:{self.people_on_board}",
-                time.time() if now is None else now,
+                timestamp,
             )
             return False
         return True
@@ -240,10 +303,17 @@ class SensorService:
         if len(self.specifications) != len(specifications):
             raise ValueError("duplicate sensor specification")
         self.last_sequence: dict[str, int] = {}
+        self.last_timestamp: dict[str, float] = {}
+        self.missing_sequences: dict[str, int] = {}
+        self._lock = threading.RLock()
 
     def ingest(self, reading: SensorReading, now: float | None = None) -> Measurement:
+        with self._lock:
+            return self._ingest(reading, now)
+
+    def _ingest(self, reading: SensorReading, now: float | None) -> Measurement:
         current = time.time() if now is None else now
-        if not all(math.isfinite(value) for value in (current, reading.value, reading.timestamp)):
+        if not all(_finite(value) for value in (current, reading.value, reading.timestamp)):
             raise ValueError("finite reading and clock required")
         if isinstance(reading.sequence, bool) or not isinstance(reading.sequence, int) or reading.sequence < 0:
             raise ValueError("non-negative integer sequence required")
@@ -261,13 +331,25 @@ class SensorService:
             raise ValueError("sensor reading is stale or from the future")
         if reading.sequence <= self.last_sequence.get(reading.sensor_id, -1):
             raise ValueError("sensor sequence is not monotonic")
+        if reading.timestamp < self.last_timestamp.get(reading.sensor_id, -math.inf):
+            raise ValueError("sensor timestamp is not monotonic")
+        span = specification.raw_max - specification.raw_min
+        if math.isfinite(span):
+            fraction = (reading.value - specification.raw_min) / span
+        else:
+            scale = max(abs(specification.raw_min), abs(specification.raw_max))
+            fraction = (reading.value / scale - specification.raw_min / scale) / (
+                specification.raw_max / scale - specification.raw_min / scale
+            )
+        fraction = min(1.0, max(0.0, fraction))
+        engineering_value = (1.0 - fraction) * specification.eu_min + fraction * specification.eu_max
+        if not math.isfinite(engineering_value):
+            raise ValueError("calibration produced a non-finite value")
+        previous = self.last_sequence.get(reading.sensor_id)
+        if previous is not None:
+            self.missing_sequences[reading.sensor_id] = self.missing_sequences.get(reading.sensor_id, 0) + reading.sequence - previous - 1
         self.last_sequence[reading.sensor_id] = reading.sequence
-        fraction = (reading.value - specification.raw_min) / (
-            specification.raw_max - specification.raw_min
-        )
-        engineering_value = specification.eu_min + fraction * (
-            specification.eu_max - specification.eu_min
-        )
+        self.last_timestamp[reading.sensor_id] = reading.timestamp
         return Measurement(
             reading.sensor_id,
             specification.metric,
@@ -276,6 +358,17 @@ class SensorService:
             reading.timestamp,
             reading.quality,
         )
+
+    def diagnostics(self) -> dict[str, dict[str, int | float]]:
+        with self._lock:
+            return {
+                sensor_id: {
+                    "last_sequence": sequence,
+                    "last_timestamp": self.last_timestamp[sensor_id],
+                    "missing_sequences": self.missing_sequences.get(sensor_id, 0),
+                }
+                for sensor_id, sequence in self.last_sequence.items()
+            }
 
 
 def sample_snapshot() -> dict[str, Any]:
@@ -313,3 +406,4 @@ if __name__ == "__main__":
     import json
 
     print(json.dumps(sample_snapshot(), indent=2))
+
