@@ -13,7 +13,12 @@ def _identifier(value: Any) -> bool:
 
 
 def _finite(value: Any) -> bool:
-    return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
 
 
 def _positive_integer(value: Any) -> bool:

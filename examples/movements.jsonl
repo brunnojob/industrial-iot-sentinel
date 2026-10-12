@@ -1,0 +1,3 @@
+{"eventId":"gate-1","personId":"crew-1","direction":"embark","zoneId":"deck","timestamp":1800000000}
+{"eventId":"gate-2","personId":"supervisor-1","direction":"embark","zoneId":"bridge","timestamp":1800000001}
+{"eventId":"gate-3","personId":"crew-1","direction":"disembark","timestamp":1800000002}
