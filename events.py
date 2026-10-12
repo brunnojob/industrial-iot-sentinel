@@ -11,26 +11,9 @@ from sentinel import DigitalTwin, Direction, MovementEvent, Person, ZonePolicy
 class DurableTwin:
     def __init__(self, path, configuration):
         self.lock = threading.RLock()
-        self.db = sqlite3.connect(path, timeout=15, check_same_thread=False)
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.executescript(
-            "CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS movements(sequence INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT UNIQUE NOT NULL,payload TEXT NOT NULL);"
-        )
         fingerprint = hashlib.sha256(
             json.dumps(configuration, sort_keys=True).encode()
         ).hexdigest()
-        prior = self.db.execute(
-            "SELECT value FROM settings WHERE key='configuration'"
-        ).fetchone()
-        if prior and prior[0] != fingerprint:
-            raise ValueError(
-                "stored event log requires its original vessel configuration"
-            )
-        with self.db:
-            self.db.execute(
-                "INSERT OR IGNORE INTO settings VALUES ('configuration',?)",
-                (fingerprint,),
-            )
         self.twin = DigitalTwin(
             configuration["vesselId"],
             {
@@ -45,10 +28,42 @@ class DurableTwin:
             configuration["capacity"],
             {p["id"]: Person(p["id"], p["role"]) for p in configuration["people"]},
         )
-        for (payload,) in self.db.execute(
-            "SELECT payload FROM movements ORDER BY sequence"
-        ):
-            self.twin.apply_movement(self.event(json.loads(payload)))
+        self.last_sequence = 0
+        self.db = sqlite3.connect(path, timeout=15, check_same_thread=False)
+        try:
+            self.db.execute("PRAGMA journal_mode=WAL")
+            self.db.executescript(
+                "CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL); CREATE TABLE IF NOT EXISTS movements(sequence INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT UNIQUE NOT NULL,payload TEXT NOT NULL);"
+            )
+            self.db.execute("BEGIN IMMEDIATE")
+            prior = self.db.execute(
+                "SELECT value FROM settings WHERE key='configuration'"
+            ).fetchone()
+            if prior and prior[0] != fingerprint:
+                raise ValueError(
+                    "stored event log requires its original vessel configuration"
+                )
+            self.db.execute(
+                "INSERT OR IGNORE INTO settings VALUES ('configuration',?)",
+                (fingerprint,),
+            )
+            self._refresh()
+            self.db.commit()
+        except Exception:
+            self.db.close()
+            raise
+
+    def _refresh(self):
+        rows = self.db.execute(
+            "SELECT sequence,payload FROM movements WHERE sequence>? ORDER BY sequence",
+            (self.last_sequence,),
+        ).fetchall()
+        if rows:
+            candidate = copy.deepcopy(self.twin)
+            for sequence, payload in rows:
+                candidate.apply_movement(self.event(json.loads(payload)))
+            self.twin = candidate
+            self.last_sequence = rows[-1][0]
 
     @staticmethod
     def event(body):
@@ -73,6 +88,7 @@ class DurableTwin:
         with self.lock:
             self.db.execute("BEGIN IMMEDIATE")
             try:
+                self._refresh()
                 event = self.event(body)
                 prior = self.db.execute(
                     "SELECT payload FROM movements WHERE event_id=?", (event.event_id,)
@@ -80,22 +96,33 @@ class DurableTwin:
                 if prior:
                     if prior[0] != payload:
                         raise ValueError("idempotency conflict")
+                    result = {"duplicate": True, **self._snapshot()}
                     self.db.rollback()
-                    return {"duplicate": True, **self.snapshot()}
+                    return result
                 candidate = copy.deepcopy(self.twin)
                 result = candidate.apply_movement(event)
-                self.db.execute(
+                cursor = self.db.execute(
                     "INSERT INTO movements(event_id,payload) VALUES (?,?)",
                     (event.event_id, payload),
                 )
                 self.db.commit()
                 self.twin = candidate
+                self.last_sequence = cursor.lastrowid
                 return result
             except Exception:
                 self.db.rollback()
                 raise
 
     def snapshot(self):
+        with self.lock:
+            self.db.execute("BEGIN")
+            try:
+                self._refresh()
+                return self._snapshot()
+            finally:
+                self.db.rollback()
+
+    def _snapshot(self):
         return {
             "vesselId": self.twin.vessel_id,
             "peopleOnBoard": self.twin.people_on_board,
