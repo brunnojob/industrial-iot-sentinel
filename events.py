@@ -32,7 +32,7 @@ class DurableTwin:
             self.db.execute(
                 "INSERT OR IGNORE INTO settings VALUES ('configuration',?)", (fingerprint,)
             )
-            self.refresh()
+            self._refresh()
             self.db.commit()
         except Exception:
             self.db.rollback()
@@ -71,16 +71,17 @@ class DurableTwin:
             body.get("zoneId"), body["timestamp"],
         )
 
-    def refresh(self):
+    def _refresh(self):
+        rows = self.db.execute(
+            "SELECT sequence,payload FROM movements WHERE sequence>? ORDER BY sequence", (self.last_sequence,)
+        ).fetchall()
+        if not rows:
+            return
         candidate = copy.deepcopy(self.twin)
-        sequence = self.last_sequence
-        for row_sequence, payload in self.db.execute(
-            "SELECT sequence,payload FROM movements WHERE sequence>? ORDER BY sequence", (sequence,)
-        ):
+        for sequence, payload in rows:
             candidate.apply_movement(self.event(json.loads(payload)))
-            sequence = row_sequence
         self.twin = candidate
-        self.last_sequence = sequence
+        self.last_sequence = rows[-1][0]
 
     @staticmethod
     def state(twin, count):
@@ -107,7 +108,7 @@ class DurableTwin:
         with self.lock:
             self.db.execute("BEGIN IMMEDIATE")
             try:
-                self.refresh()
+                self._refresh()
                 candidate = copy.deepcopy(self.twin)
                 count = self.db.execute("SELECT COUNT(*) FROM movements").fetchone()[0]
                 sequence = self.last_sequence
@@ -140,14 +141,17 @@ class DurableTwin:
         with self.lock:
             self.db.execute("BEGIN")
             try:
-                self.refresh()
-                count = self.db.execute("SELECT COUNT(*) FROM movements").fetchone()[0]
-                result = self.state(self.twin, count)
+                self._refresh()
+                result = self._snapshot()
                 self.db.commit()
                 return result
             except Exception:
                 self.db.rollback()
                 raise
+
+    def _snapshot(self):
+        count = self.db.execute("SELECT COUNT(*) FROM movements").fetchone()[0]
+        return self.state(self.twin, count)
 
     def close(self):
         with self.lock:

@@ -10,12 +10,17 @@ Requirements: Python 3.11+.
 
 ```sh
 python -m unittest discover
+python -m unittest discover -s cloud
 python events.py configuracao.json --database .local/twin.db < movimentos.jsonl > result.json
 ```
 
 ## Behavior
 
 `DurableTwin` validates a copy of the state before committing a transaction. Capacity failures preserve the previous occupancy. A configuration fingerprint prevents silent configuration changes in an existing database.
+
+Multiple `DurableTwin` instances can share one local SQLite journal. Each submission takes the database write lock and replays newly committed movements before checking roles and capacity. Concurrent requests for the last available place accept only one movement. Snapshots refresh occupancy and count events within one read transaction, so both values describe the same database version. Duplicate submissions return the current committed state.
+
+The journal is append-only. Do not edit or delete stored movements or share the database across machines through a network filesystem. Read occupancy through `snapshot()`; direct access to `twin` reflects only the last state loaded by that instance.
 
 ## Optional report archive
 
@@ -29,7 +34,7 @@ Original source and documentation are MIT licensed; see [LICENSE](LICENSE). Thir
 
 Sensor specifications require finite calibration endpoints and unique sensor identifiers. Readings reject invalid clocks, timestamps, non-finite values and invalid sequence numbers before advancing sensor state.
 
-Contribution trailer: `Co-authored-by: nyctophile <33561761+ineedfoundmyway@users.noreply.github.com>`.
+Contributors: [brunnojob](https://github.com/brunnojob) and [ineedfoundmyway](https://github.com/ineedfoundmyway).
 
 ## Execution proof
 
